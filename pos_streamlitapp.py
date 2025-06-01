@@ -1,9 +1,22 @@
+import streamlit as st
+
+# IMPORTANT: set_page_config() must be the first Streamlit command
+st.set_page_config(
+    page_title="POS Transaction Analytics Dashboard",
+    page_icon="💳",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Now import other libraries
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import numpy as np
 from datetime import datetime, timedelta
+import io
+import base64
 import os
 from typing import Dict, List, Tuple, Optional
 import warnings
@@ -67,20 +80,12 @@ class POSTransactionAnalyzer:
             
             return df
         except Exception as e:
-            print(f"Warning: Date parsing issue - {str(e)}")
+            st.warning(f"Date parsing issue - {str(e)}")
             return df
     
-    def load_and_process_file(self, file_path: str, file_type: str) -> pd.DataFrame:
-        """Load and process either Arca or Interswitch file."""
+    def load_and_process_dataframe(self, df: pd.DataFrame, file_type: str) -> pd.DataFrame:
+        """Process a pandas DataFrame directly (for Streamlit file uploads)."""
         try:
-            # Read file based on extension
-            if file_path.endswith('.csv'):
-                df = pd.read_csv(file_path)
-            elif file_path.endswith(('.xlsx', '.xls')):
-                df = pd.read_excel(file_path)
-            else:
-                raise ValueError("Unsupported file format. Use CSV or Excel files.")
-            
             # Select relevant columns based on file type
             if file_type.lower() == 'arca':
                 column_mapping = self.arca_columns
@@ -92,10 +97,13 @@ class POSTransactionAnalyzer:
             # Check if required columns exist
             missing_cols = [col for col in column_mapping.keys() if col not in df.columns]
             if missing_cols:
-                print(f"Warning: Missing columns in {file_type} file: {missing_cols}")
+                st.warning(f"Missing columns in {file_type} file: {missing_cols}")
                 # Use available columns only
                 available_mapping = {k: v for k, v in column_mapping.items() if k in df.columns}
                 column_mapping = available_mapping
+            
+            if not column_mapping:
+                raise ValueError(f"No valid columns found for {file_type} file")
             
             # Select and rename columns
             df_processed = df[list(column_mapping.keys())].copy()
@@ -119,7 +127,7 @@ class POSTransactionAnalyzer:
             return df_processed
             
         except Exception as e:
-            raise Exception(f"Error processing {file_type} file: {str(e)}")
+            raise Exception(f"Error processing {file_type} data: {str(e)}")
     
     def analyze_transactions(self, arca_df: pd.DataFrame, interswitch_df: pd.DataFrame, 
                            date_range: Optional[List[str]] = None) -> pd.DataFrame:
@@ -210,54 +218,6 @@ class POSTransactionAnalyzer:
         except Exception as e:
             raise Exception(f"Error during analysis: {str(e)}")
     
-    def export_results(self, results_df: pd.DataFrame, output_dir: str = "output", 
-                      filename_prefix: str = "pos_analysis") -> Dict[str, str]:
-        """Export results to both CSV and Excel formats."""
-        try:
-            # Create output directory if it doesn't exist
-            os.makedirs(output_dir, exist_ok=True)
-            
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            
-            # Export to CSV
-            csv_filename = f"{filename_prefix}_{timestamp}.csv"
-            csv_path = os.path.join(output_dir, csv_filename)
-            results_df.to_csv(csv_path, index=False)
-            
-            # Export to Excel with formatting
-            excel_filename = f"{filename_prefix}_{timestamp}.xlsx"
-            excel_path = os.path.join(output_dir, excel_filename)
-            
-            with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
-                results_df.to_excel(writer, sheet_name='Transaction_Analysis', index=False)
-                
-                # Get workbook and worksheet
-                workbook = writer.book
-                worksheet = writer.sheets['Transaction_Analysis']
-                
-                # Auto-adjust column widths
-                for column in worksheet.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(str(cell.value))
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 50)
-                    worksheet.column_dimensions[column_letter].width = adjusted_width
-            
-            return {
-                'csv_path': csv_path,
-                'excel_path': excel_path,
-                'csv_filename': csv_filename,
-                'excel_filename': excel_filename
-            }
-            
-        except Exception as e:
-            raise Exception(f"Error exporting results: {str(e)}")
-    
     def get_summary_stats(self, results_df: pd.DataFrame) -> Dict:
         """Get summary statistics from the analysis results."""
         try:
@@ -273,73 +233,8 @@ class POSTransactionAnalyzer:
             }
             return stats
         except Exception as e:
-            print(f"Error calculating summary stats: {str(e)}")
+            st.error(f"Error calculating summary stats: {str(e)}")
             return {}
-    
-    def process_multiple_files(self, file_configs: List[Dict]) -> pd.DataFrame:
-        """
-        Process multiple files and combine results.
-        file_configs: List of dicts with keys: 'path', 'type' ('arca' or 'interswitch')
-        """
-        arca_dfs = []
-        interswitch_dfs = []
-        
-        for config in file_configs:
-            df = self.load_and_process_file(config['path'], config['type'])
-            if config['type'].lower() == 'arca':
-                arca_dfs.append(df)
-            else:
-                interswitch_dfs.append(df)
-        
-        # Combine all dataframes by type
-        arca_combined = pd.concat(arca_dfs, ignore_index=True) if arca_dfs else pd.DataFrame()
-        interswitch_combined = pd.concat(interswitch_dfs, ignore_index=True) if interswitch_dfs else pd.DataFrame()
-        
-        return self.analyze_transactions(arca_combined, interswitch_combined)
-
-# Example usage
-if __name__ == "__main__":
-    analyzer = POSTransactionAnalyzer()
-    
-    # Example of how to use the analyzer
-    try:
-        # Load files
-        arca_df = analyzer.load_and_process_file("arca_report.csv", "arca")
-        interswitch_df = analyzer.load_and_process_file("interswitch_report.csv", "interswitch")
-        
-        # Analyze transactions
-        results = analyzer.analyze_transactions(arca_df, interswitch_df)
-        
-        # Export results
-        export_info = analyzer.export_results(results)
-        print(f"Results exported to: {export_info['csv_path']} and {export_info['excel_path']}")
-        
-        # Get summary statistics
-        stats = analyzer.get_summary_stats(results)
-        print(f"Analysis complete. Total terminals: {stats.get('total_terminals', 0)}")
-        
-    except Exception as e:
-        print(f"Error: {str(e)}")
-
-
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import numpy as np
-from datetime import datetime, timedelta
-import io
-import base64
-from pos_streamlitapp import POSTransactionAnalyzer  # Import our analyzer class
-
-# Page configuration
-st.set_page_config(
-    page_title="POS Transaction Analytics Dashboard",
-    page_icon="💳",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Custom CSS for better styling
 st.markdown("""
@@ -395,23 +290,6 @@ if 'analyzer' not in st.session_state:
     st.session_state.analyzer = POSTransactionAnalyzer()
 if 'analysis_results' not in st.session_state:
     st.session_state.analysis_results = None
-if 'export_info' not in st.session_state:
-    st.session_state.export_info = None
-
-def create_download_link(df, filename, file_format='csv'):
-    """Create a download link for dataframe."""
-    if file_format == 'csv':
-        csv = df.to_csv(index=False)
-        b64 = base64.b64encode(csv.encode()).decode()
-        href = f'<a href="data:file/csv;base64,{b64}" download="{filename}.csv">Download CSV File</a>'
-    elif file_format == 'excel':
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name='Analysis', index=False)
-        excel_data = output.getvalue()
-        b64 = base64.b64encode(excel_data).decode()
-        href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}.xlsx">Download Excel File</a>'
-    return href
 
 def main():
     # Header
@@ -464,32 +342,28 @@ def main():
                 arca_dfs = []
                 interswitch_dfs = []
                 
-                # Save and process Arca files
+                # Process Arca files
                 for arca_file in arca_files:
-                    # Read file content
+                    # Read file content directly
                     if arca_file.name.endswith('.csv'):
                         df = pd.read_csv(arca_file)
                     else:
                         df = pd.read_excel(arca_file)
                     
                     # Process using analyzer
-                    temp_path = f"temp_arca_{arca_file.name}"
-                    df.to_csv(temp_path, index=False)
-                    processed_df = st.session_state.analyzer.load_and_process_file(temp_path, "arca")
+                    processed_df = st.session_state.analyzer.load_and_process_dataframe(df, "arca")
                     arca_dfs.append(processed_df)
                 
-                # Save and process Interswitch files
+                # Process Interswitch files
                 for interswitch_file in interswitch_files:
-                    # Read file content
+                    # Read file content directly
                     if interswitch_file.name.endswith('.csv'):
                         df = pd.read_csv(interswitch_file)
                     else:
                         df = pd.read_excel(interswitch_file)
                     
                     # Process using analyzer
-                    temp_path = f"temp_interswitch_{interswitch_file.name}"
-                    df.to_csv(temp_path, index=False)
-                    processed_df = st.session_state.analyzer.load_and_process_file(temp_path, "interswitch")
+                    processed_df = st.session_state.analyzer.load_and_process_dataframe(df, "interswitch")
                     interswitch_dfs.append(processed_df)
                 
                 # Combine dataframes
@@ -502,10 +376,6 @@ def main():
                 )
                 
                 st.session_state.analysis_results = results
-                
-                # Export results
-                export_info = st.session_state.analyzer.export_results(results)
-                st.session_state.export_info = export_info
                 
                 st.success("✅ Analysis completed successfully!")
                 
@@ -733,16 +603,6 @@ def main():
             )
         
         st.markdown('</div>', unsafe_allow_html=True)
-        
-        # File location info
-        if st.session_state.export_info:
-            st.info(f"""
-            📁 **Files also saved to:**
-            - CSV: `{st.session_state.export_info['csv_filename']}`
-            - Excel: `{st.session_state.export_info['excel_filename']}`
-            
-            Location: `output/` folder in your project directory
-            """)
     
     else:
         # Instructions when no data is loaded
