@@ -1,5 +1,14 @@
 import pandas as pd
 import numpy as np
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import numpy as np
+from datetime import datetime, timedelta
+import io
+import base64
 from datetime import datetime, timedelta
 import os
 from typing import Dict, List, Tuple, Optional
@@ -319,7 +328,7 @@ if __name__ == "__main__":
         print(f"Error: {str(e)}")
 
 
-        import streamlit as st
+import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
