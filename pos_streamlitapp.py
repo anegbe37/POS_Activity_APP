@@ -571,7 +571,7 @@ def main():
                 st.error(f"❌ Error during analysis: {str(e)}")
                 return
     
-    # Display results if available - THIS IS THE KEY FIX
+    # Display results if available
     if st.session_state.analysis_results is not None:
         results_df = st.session_state.analysis_results
         
