@@ -571,290 +571,292 @@ def main():
                 st.error(f"❌ Error during analysis: {str(e)}")
                 return
     
-    # Display results if available
+    # Display results if available - THIS IS THE KEY FIX
     if st.session_state.analysis_results is not None:
         results_df = st.session_state.analysis_results
         
         # Summary Statistics with better layout
-    st.markdown('<h2 class="section-header">📊 Summary Statistics</h2>', unsafe_allow_html=True)
+        st.markdown('<h2 class="section-header">📊 Summary Statistics</h2>', unsafe_allow_html=True)
 
-    # Calculate summary stats
-    stats = st.session_state.analyzer.get_summary_stats(results_df)
+        # Calculate summary stats
+        stats = st.session_state.analyzer.get_summary_stats(results_df)
 
-    # Create a container for better spacing and styling
-    with st.container():
-        # Add custom CSS for this specific container
-        st.markdown("""
-        <style>
-        div[data-testid="column"] {
-            background-color: white !important;
-            padding: 1rem !important;
-            border-radius: 0.5rem !important;
-            border: 1px solid #e0e0e0 !important;
-            margin: 0.25rem !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # Display metrics in columns with better spacing
-        col1, col2, col3, col4 = st.columns([1, 1, 1, 1.2])
-        
-        with col1:
-            st.markdown(f"""
-            <div class="metric-container">
-                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
-                    Total Terminals
-                </div>
-                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
-                    {stats.get('total_terminals', 0):,}
-                </div>
-            </div>
+        # Create a container for better spacing and styling
+        with st.container():
+            # Add custom CSS for this specific container
+            st.markdown("""
+            <style>
+            div[data-testid="column"] {
+                background-color: white !important;
+                padding: 1rem !important;
+                border-radius: 0.5rem !important;
+                border: 1px solid #e0e0e0 !important;
+                margin: 0.25rem !important;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+            }
+            </style>
             """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div class="metric-container">
-                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
-                    Total Merchants
-                </div>
-                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
-                    {stats.get('total_merchants', 0):,}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div class="metric-container">
-                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
-                    Total Transactions
-                </div>
-                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
-                    {stats.get('total_transactions', 0):,}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            total_volume = stats.get('total_volume', 0)
-            if total_volume >= 1_000_000_000:  # Billions
-                volume_display = f"₦{total_volume/1_000_000_000:.1f}B"
-            elif total_volume >= 1_000_000:  # Millions
-                volume_display = f"₦{total_volume/1_000_000:.1f}M"
-            elif total_volume >= 1_000:  # Thousands
-                volume_display = f"₦{total_volume/1_000:.1f}K"
-            else:
-                volume_display = f"₦{total_volume:,.0f}"
             
-            st.markdown(f"""
-            <div class="metric-container">
-                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
-                    Total Volume
-                </div>
-                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
-                    {volume_display}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Add additional metrics row for more details
-        st.markdown("---")
-        col5, col6, col7, col8 = st.columns(4)
-        
-        with col5:
-            avg_trans = stats.get('avg_transactions_per_terminal', 0)
-            st.markdown(f"""
-            <div class="metric-container">
-                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
-                    Avg Trans/Terminal
-                </div>
-                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
-                    {avg_trans:.1f}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col6:
-            avg_volume = stats.get('avg_volume_per_terminal', 0)
-            if avg_volume >= 1_000_000:
-                avg_display = f"₦{avg_volume/1_000_000:.1f}M"
-            elif avg_volume >= 1_000:
-                avg_display = f"₦{avg_volume/1_000:.1f}K"
-            else:
-                avg_display = f"₦{avg_volume:,.0f}"
+            # Display metrics in columns with better spacing
+            col1, col2, col3, col4 = st.columns([1, 1, 1, 1.2])
             
-            st.markdown(f"""
-            <div class="metric-container">
-                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
-                    Avg Volume/Terminal
+            with col1:
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                        Total Terminals
+                    </div>
+                    <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                        {stats.get('total_terminals', 0):,}
+                    </div>
                 </div>
-                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
-                    {avg_display}
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                        Total Merchants
+                    </div>
+                    <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                        {stats.get('total_merchants', 0):,}
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col7:
-            # Active terminals (terminals with transactions > 0)
-            active_terminals = len(results_df[results_df['Total_Count'] > 0])
-            st.markdown(f"""
-            <div class="metric-container">
-                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
-                    Active Terminals
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                        Total Transactions
+                    </div>
+                    <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                        {stats.get('total_transactions', 0):,}
+                    </div>
                 </div>
-                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
-                    {active_terminals:,}
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                total_volume = stats.get('total_volume', 0)
+                if total_volume >= 1_000_000_000:  # Billions
+                    volume_display = f"₦{total_volume/1_000_000_000:.1f}B"
+                elif total_volume >= 1_000_000:  # Millions
+                    volume_display = f"₦{total_volume/1_000_000:.1f}M"
+                elif total_volume >= 1_000:  # Thousands
+                    volume_display = f"₦{total_volume/1_000:.1f}K"
+                else:
+                    volume_display = f"₦{total_volume:,.0f}"
+                
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                        Total Volume
+                    </div>
+                    <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                        {volume_display}
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col8:
-            # Success rate (assuming any transaction count means success)
-            success_rate = (active_terminals / stats.get('total_terminals', 1)) * 100
-            st.markdown(f"""
-            <div class="metric-container">
-                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
-                    Activity Rate
+                """, unsafe_allow_html=True)
+            
+            # Add additional metrics row for more details
+            st.markdown("---")
+            col5, col6, col7, col8 = st.columns(4)
+            
+            with col5:
+                avg_trans = stats.get('avg_transactions_per_terminal', 0)
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                        Avg Trans/Terminal
+                    </div>
+                    <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                        {avg_trans:.1f}
+                    </div>
                 </div>
-                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
-                    {success_rate:.1f}%
+                """, unsafe_allow_html=True)
+            
+            with col6:
+                avg_volume = stats.get('avg_volume_per_terminal', 0)
+                if avg_volume >= 1_000_000:
+                    avg_display = f"₦{avg_volume/1_000_000:.1f}M"
+                elif avg_volume >= 1_000:
+                    avg_display = f"₦{avg_volume/1_000:.1f}K"
+                else:
+                    avg_display = f"₦{avg_volume:,.0f}"
+                
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                        Avg Volume/Terminal
+                    </div>
+                    <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                        {avg_display}
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Charts section
-        st.markdown('<h2 class="section-header">📈 Analytics Charts</h2>', unsafe_allow_html=True)
-        
-        chart_col1, chart_col2 = st.columns(2)
-        
-        with chart_col1:
-            # Top terminals by transaction count
-            if 'top_terminals_by_count' in stats and stats['top_terminals_by_count']:
-                top_count_df = pd.DataFrame(stats['top_terminals_by_count'])
-                fig_count = px.bar(
-                    top_count_df,
-                    x='TID',
-                    y='Total_Count',
-                    title='Top 5 Terminals by Transaction Count',
-                    labels={'Total_Count': 'Transaction Count', 'TID': 'Terminal ID'}
+                """, unsafe_allow_html=True)
+            
+            with col7:
+                # Active terminals (terminals with transactions > 0)
+                active_terminals = len(results_df[results_df['Total_Count'] > 0])
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                        Active Terminals
+                    </div>
+                    <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                        {active_terminals:,}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col8:
+                # Success rate (assuming any transaction count means success)
+                success_rate = (active_terminals / stats.get('total_terminals', 1)) * 100
+                st.markdown(f"""
+                <div class="metric-container">
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                        Activity Rate
+                    </div>
+                    <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                        {success_rate:.1f}%
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Charts section
+            st.markdown('<h2 class="section-header">📈 Analytics Charts</h2>', unsafe_allow_html=True)
+            
+            chart_col1, chart_col2 = st.columns(2)
+            
+            with chart_col1:
+                # Top terminals by transaction count
+                if 'top_terminals_by_count' in stats and stats['top_terminals_by_count']:
+                    top_count_df = pd.DataFrame(stats['top_terminals_by_count'])
+                    fig_count = px.bar(
+                        top_count_df,
+                        x='TID',
+                        y='Total_Count',
+                        title='Top 5 Terminals by Transaction Count',
+                        labels={'Total_Count': 'Transaction Count', 'TID': 'Terminal ID'}
+                    )
+                    fig_count.update_layout(height=400)
+                    st.plotly_chart(fig_count, use_container_width=True)
+            
+            with chart_col2:
+                # Top terminals by volume
+                if 'top_terminals_by_volume' in stats and stats['top_terminals_by_volume']:
+                    top_volume_df = pd.DataFrame(stats['top_terminals_by_volume'])
+                    fig_volume = px.bar(
+                        top_volume_df,
+                        x='TID',
+                        y='Total_Volume',
+                        title='Top 5 Terminals by Transaction Volume',
+                        labels={'Total_Volume': 'Transaction Volume (₦)', 'TID': 'Terminal ID'}
+                    )
+                    fig_volume.update_layout(height=400)
+                    st.plotly_chart(fig_volume, use_container_width=True)
+            
+            # Transaction distribution
+            st.markdown("### Transaction Distribution Analysis")
+            
+            # Create distribution charts
+            dist_col1, dist_col2 = st.columns(2)
+            
+            with dist_col1:
+                fig_hist_count = px.histogram(
+                    results_df,
+                    x='Total_Count',
+                    title='Distribution of Transaction Counts per Terminal',
+                    labels={'Total_Count': 'Transaction Count', 'count': 'Number of Terminals'}
                 )
-                fig_count.update_layout(height=400)
-                st.plotly_chart(fig_count, use_container_width=True)
-        
-        with chart_col2:
-            # Top terminals by volume
-            if 'top_terminals_by_volume' in stats and stats['top_terminals_by_volume']:
-                top_volume_df = pd.DataFrame(stats['top_terminals_by_volume'])
-                fig_volume = px.bar(
-                    top_volume_df,
-                    x='TID',
-                    y='Total_Volume',
-                    title='Top 5 Terminals by Transaction Volume',
-                    labels={'Total_Volume': 'Transaction Volume (₦)', 'TID': 'Terminal ID'}
+                st.plotly_chart(fig_hist_count, use_container_width=True)
+            
+            with dist_col2:
+                fig_hist_volume = px.histogram(
+                    results_df,
+                    x='Total_Volume',
+                    title='Distribution of Transaction Volumes per Terminal',
+                    labels={'Total_Volume': 'Transaction Volume (₦)', 'count': 'Number of Terminals'}
                 )
-                fig_volume.update_layout(height=400)
-                st.plotly_chart(fig_volume, use_container_width=True)
-        
-        # Transaction distribution
-        st.markdown("### Transaction Distribution Analysis")
-        
-        # Create distribution charts
-        dist_col1, dist_col2 = st.columns(2)
-        
-        with dist_col1:
-            fig_hist_count = px.histogram(
-                results_df,
-                x='Total_Count',
-                title='Distribution of Transaction Counts per Terminal',
-                labels={'Total_Count': 'Transaction Count', 'count': 'Number of Terminals'}
-            )
-            st.plotly_chart(fig_hist_count, use_container_width=True)
-        
-        with dist_col2:
-            fig_hist_volume = px.histogram(
-                results_df,
-                x='Total_Volume',
-                title='Distribution of Transaction Volumes per Terminal',
-                labels={'Total_Volume': 'Transaction Volume (₦)', 'count': 'Number of Terminals'}
-            )
-            st.plotly_chart(fig_hist_volume, use_container_width=True)
-        
-        # Data table
-        st.markdown('<h2 class="section-header">📋 Detailed Analysis Results</h2>', unsafe_allow_html=True)
-        
-        # Add search and filter options
-        search_term = st.text_input("🔍 Search terminals or merchants:", "")
-        
-        # Filter dataframe based on search
-        if search_term:
-            mask = (
-                results_df['TID'].astype(str).str.contains(search_term, case=False, na=False) |
-                results_df['MID'].astype(str).str.contains(search_term, case=False, na=False) |
-                results_df['Merchant_Name'].astype(str).str.contains(search_term, case=False, na=False)
-            )
-            filtered_df = results_df[mask]
-        else:
-            filtered_df = results_df
-        
-        # Display dataframe with better formatting
-        # Format the dataframe for better display
-        display_df = filtered_df.copy()
-        
-        # Format monetary columns
-        money_columns = [col for col in display_df.columns if 'Amount' in col or col == 'Total_Volume']
-        for col in money_columns:
-            if col in display_df.columns:
-                display_df[col] = display_df[col].apply(lambda x: f"₦{x:,.0f}" if pd.notnull(x) and x != 0 else "₦0")
-        
-        # Format count columns
-        count_columns = [col for col in display_df.columns if 'Count' in col]
-        for col in count_columns:
-            if col in display_df.columns:
-                display_df[col] = display_df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
-        
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            height=400
-        )
-        
-        # Download section
-        st.markdown('<h2 class="section-header">💾 Download Reports</h2>', unsafe_allow_html=True)
-        st.markdown('<div class="download-section">', unsafe_allow_html=True)
-        
-        download_col1, download_col2 = st.columns(2)
-        
-        with download_col1:
-            st.markdown("**Download Current Analysis:**")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                st.plotly_chart(fig_hist_volume, use_container_width=True)
             
-            # CSV download
-            csv = filtered_df.to_csv(index=False)
-            st.download_button(
-                label="📄 Download as CSV",
-                data=csv,
-                file_name=f"pos_analysis_{timestamp}.csv",
-                mime="text/csv"
-            )
-        
-        with download_col2:
-            st.markdown("**Download as Excel:**")
-            # Excel download
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                filtered_df.to_excel(writer, sheet_name='Analysis', index=False)
-            excel_data = output.getvalue()
+            # Data table
+            st.markdown('<h2 class="section-header">📋 Detailed Analysis Results</h2>', unsafe_allow_html=True)
             
-            st.download_button(
-                label="📊 Download as Excel",
-                data=excel_data,
-                file_name=f"pos_analysis_{timestamp}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            # Add search and filter options
+            search_term = st.text_input("🔍 Search terminals or merchants:", "")
+            
+            # Filter dataframe based on search
+            if search_term:
+                mask = (
+                    results_df['TID'].astype(str).str.contains(search_term, case=False, na=False) |
+                    results_df['MID'].astype(str).str.contains(search_term, case=False, na=False) |
+                    results_df['Merchant_Name'].astype(str).str.contains(search_term, case=False, na=False)
+                )
+                filtered_df = results_df[mask]
+            else:
+                filtered_df = results_df
+            
+            # Display dataframe with better formatting
+            # Format the dataframe for better display
+            display_df = filtered_df.copy()
+            
+            # Format monetary columns
+            money_columns = [col for col in display_df.columns if 'Amount' in col or col == 'Total_Volume']
+            for col in money_columns:
+                if col in display_df.columns:
+                    display_df[col] = display_df[col].apply(lambda x: f"₦{x:,.0f}" if pd.notnull(x) and x != 0 else "₦0")
+            
+            # Format count columns
+            count_columns = [col for col in display_df.columns if 'Count' in col]
+            for col in count_columns:
+                if col in display_df.columns:
+                    display_df[col] = display_df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "0")
+            
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                height=400
             )
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
+            
+            # Download section
+            st.markdown('<h2 class="section-header">💾 Download Reports</h2>', unsafe_allow_html=True)
+            st.markdown('<div class="download-section">', unsafe_allow_html=True)
+            
+            download_col1, download_col2 = st.columns(2)
+            
+            with download_col1:
+                st.markdown("**Download Current Analysis:**")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                
+                # CSV download
+                csv = filtered_df.to_csv(index=False)
+                st.download_button(
+                    label="📄 Download as CSV",
+                    data=csv,
+                    file_name=f"pos_analysis_{timestamp}.csv",
+                    mime="text/csv"
+                )
+            
+            with download_col2:
+                st.markdown("**Download as Excel:**")
+                # Excel download
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                    filtered_df.to_excel(writer, sheet_name='Analysis', index=False)
+                excel_data = output.getvalue()
+                
+                st.download_button(
+                    label="📊 Download as Excel",
+                    data=excel_data,
+                    file_name=f"pos_analysis_{timestamp}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    else:
+        # Show instructions when no analysis has been run yet
         st.markdown("""
         ### How to use this dashboard:
         
