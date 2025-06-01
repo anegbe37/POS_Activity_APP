@@ -328,7 +328,7 @@ import numpy as np
 from datetime import datetime, timedelta
 import io
 import base64
-from pos_analyzer import POSTransactionAnalyzer  # Import our analyzer class
+from pos_streamlitapp import POSTransactionAnalyzer  # Import our analyzer class
 
 # Page configuration
 st.set_page_config(
