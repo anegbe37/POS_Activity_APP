@@ -22,6 +22,55 @@ from typing import Dict, List, Tuple, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
+# Try to import psutil for memory monitoring, fallback if not available
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
+
+# Cache function for file processing
+@st.cache_data
+def process_uploaded_file(file_content, file_name, file_type):
+    """Cache file processing to avoid reprocessing on reruns"""
+    try:
+        if file_name.endswith('.csv'):
+            df = pd.read_csv(io.StringIO(file_content.decode('utf-8')))
+        else:
+            df = pd.read_excel(io.BytesIO(file_content))
+        return df, None
+    except Exception as e:
+        return None, str(e)
+
+# Data validation function
+def validate_data_format(df, file_type):
+    """Validate uploaded data format"""
+    required_columns = {
+        'arca': ['TRANSACTION_DATE', 'TERMINAL_ID', 'MERCHANT_ID'],
+        'interswitch': ['DATETIME', 'TERMINAL_ID', 'MERCHANT_ID']
+    }
+    
+    missing_cols = [col for col in required_columns[file_type.lower()] 
+                   if col not in df.columns]
+    
+    if missing_cols:
+        st.error(f"Missing required columns in {file_type} file: {missing_cols}")
+        st.info(f"Expected columns: {required_columns[file_type.lower()]}")
+        return False
+    return True
+
+# Memory usage display function
+def display_memory_usage():
+    """Display current memory usage"""
+    if PSUTIL_AVAILABLE:
+        try:
+            memory = psutil.virtual_memory()
+            st.sidebar.text(f"💾 Memory: {memory.percent:.1f}% used")
+        except Exception:
+            st.sidebar.text("💾 Memory monitoring unavailable")
+    else:
+        st.sidebar.text("💾 Memory monitoring unavailable")
+
 class POSTransactionAnalyzer:
     """
     A comprehensive analyzer for POS terminal transactions from Interswitch and Arca settlement reports.
@@ -86,6 +135,18 @@ class POSTransactionAnalyzer:
     def load_and_process_dataframe(self, df: pd.DataFrame, file_type: str) -> pd.DataFrame:
         """Process a pandas DataFrame directly (for Streamlit file uploads)."""
         try:
+            # Add file size check
+            if len(df) > 100000:  # Adjust limit as needed
+                st.warning(f"Large file detected ({len(df):,} rows). Processing may take time.")
+            
+            # Check if DataFrame is empty
+            if df.empty:
+                raise ValueError(f"The {file_type} file appears to be empty")
+            
+            # Validate data format
+            if not validate_data_format(df, file_type):
+                return pd.DataFrame()
+            
             # Select relevant columns based on file type
             if file_type.lower() == 'arca':
                 column_mapping = self.arca_columns
@@ -126,17 +187,31 @@ class POSTransactionAnalyzer:
             
             return df_processed
             
+        except pd.errors.EmptyDataError:
+            st.error(f"The {file_type} file is empty or corrupted")
+            return pd.DataFrame()
+        except pd.errors.ParserError as e:
+            st.error(f"Error parsing {file_type} file: {str(e)}")
+            return pd.DataFrame()
         except Exception as e:
-            raise Exception(f"Error processing {file_type} data: {str(e)}")
+            st.error(f"Error processing {file_type} data: {str(e)}")
+            return pd.DataFrame()
     
-    def analyze_transactions(self, arca_df: pd.DataFrame, interswitch_df: pd.DataFrame, 
+    def analyze_transactions_with_progress(self, arca_df: pd.DataFrame, interswitch_df: pd.DataFrame, 
                            date_range: Optional[List[str]] = None) -> pd.DataFrame:
-        """
-        Analyze transactions and create the required summary report.
-        """
+        """Analyze transactions with progress tracking."""
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
         try:
+            status_text.text('🔄 Combining dataframes...')
+            progress_bar.progress(20)
+            
             # Combine dataframes
             combined_df = pd.concat([arca_df, interswitch_df], ignore_index=True)
+            
+            status_text.text('📅 Filtering by date range...')
+            progress_bar.progress(40)
             
             # Filter by date range if provided
             if date_range:
@@ -146,6 +221,9 @@ class POSTransactionAnalyzer:
                     (combined_df['date'] >= start_date) & 
                     (combined_df['date'] <= end_date)
                 ]
+            
+            status_text.text('🏪 Processing terminals...')
+            progress_bar.progress(60)
             
             # Get unique dates for dynamic column creation
             unique_dates = sorted(combined_df['date'].unique()) if 'date' in combined_df.columns else []
@@ -157,8 +235,15 @@ class POSTransactionAnalyzer:
             ]).unique()
             
             results = []
+            total_terminals = len(all_terminals)
             
-            for terminal_id in all_terminals:
+            for idx, terminal_id in enumerate(all_terminals):
+                # Update progress for terminal processing
+                if idx % 100 == 0:  # Update every 100 terminals
+                    progress = 60 + int((idx / total_terminals) * 30)
+                    progress_bar.progress(progress)
+                    status_text.text(f'🏪 Processing terminal {idx + 1}/{total_terminals}...')
+                
                 terminal_data = combined_df[combined_df['terminal_id'] == terminal_id]
                 
                 if terminal_data.empty:
@@ -206,17 +291,34 @@ class POSTransactionAnalyzer:
                 
                 results.append(row_data)
             
+            status_text.text('📊 Finalizing results...')
+            progress_bar.progress(90)
+            
             # Create DataFrame
             results_df = pd.DataFrame(results)
             
             # Sort by TID
             results_df = results_df.sort_values('TID').reset_index(drop=True)
             
+            progress_bar.progress(100)
+            status_text.text('✅ Analysis complete!')
+            
             self.analysis_results = results_df
             return results_df
             
         except Exception as e:
             raise Exception(f"Error during analysis: {str(e)}")
+        finally:
+            progress_bar.empty()
+            status_text.empty()
+    
+    def analyze_transactions(self, arca_df: pd.DataFrame, interswitch_df: pd.DataFrame, 
+                           date_range: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Legacy analyze_transactions method for backward compatibility.
+        Now calls the progress version.
+        """
+        return self.analyze_transactions_with_progress(arca_df, interswitch_df, date_range)
     
     def get_summary_stats(self, results_df: pd.DataFrame) -> Dict:
         """Get summary statistics from the analysis results."""
@@ -239,6 +341,7 @@ class POSTransactionAnalyzer:
 # Custom CSS for better styling
 st.markdown("""
 <style>
+    /* Main header styling */
     .main-header {
         font-size: 2.5rem;
         font-weight: bold;
@@ -246,29 +349,52 @@ st.markdown("""
         margin-bottom: 2rem;
         color: #1f77b4;
     }
+    
+    /* Metric card improvements for better visibility */
     .metric-card {
-        background-color: #f0f2f6;
+        background-color: #ffffff;
         padding: 1rem;
         border-radius: 0.5rem;
         border-left: 4px solid #1f77b4;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
+    
+    /* Force metric styling to be visible */
     .stMetric {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border: 1px solid #e9ecef;
+        background-color: #ffffff !important;
+        padding: 1rem !important;
+        border-radius: 0.5rem !important;
+        border: 1px solid #e0e0e0 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
     }
-    .stMetric > div {
-        white-space: nowrap;
+    
+    /* Metric label styling */
+    .stMetric > div > div > div > div {
+        color: #333333 !important;
+        font-weight: 600 !important;
+        font-size: 0.9rem !important;
     }
-    .stMetric label {
-        font-size: 0.875rem !important;
-        font-weight: 500 !important;
-    }
-    .stMetric [data-testid="metric-value"] {
-        font-size: 1.5rem !important;
+    
+    /* Metric value styling */
+    .stMetric > div > div > div[data-testid="metric-value"] {
+        color: #1f77b4 !important;
+        font-size: 1.8rem !important;
         font-weight: bold !important;
     }
+    
+    /* Alternative approach for metric values */
+    [data-testid="metric-value"] {
+        color: #1f77b4 !important;
+        font-size: 1.8rem !important;
+        font-weight: bold !important;
+    }
+    
+    /* Metric delta styling */
+    [data-testid="metric-delta"] {
+        color: #666666 !important;
+    }
+    
+    /* Section headers */
     .section-header {
         font-size: 1.5rem;
         font-weight: bold;
@@ -276,11 +402,73 @@ st.markdown("""
         margin-bottom: 1rem;
         color: #2c3e50;
     }
+    
+    /* Download section */
     .download-section {
-        background-color: #e8f4fd;
-        padding: 1rem;
+        background-color: #f8f9fa;
+        padding: 1.5rem;
         border-radius: 0.5rem;
         margin-top: 1rem;
+        border: 1px solid #e9ecef;
+    }
+    
+    /* Force dark mode compatibility */
+    .stApp > div {
+        background-color: #ffffff;
+    }
+    
+    /* Sidebar styling */
+    .css-1d391kg {
+        background-color: #f8f9fa;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background-color: #1f77b4;
+        color: white;
+        border: none;
+        border-radius: 0.25rem;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+    }
+    
+    .stButton > button:hover {
+        background-color: #1565c0;
+        color: white;
+    }
+    
+    /* File uploader styling */
+    .stFileUploader > div > div > div {
+        background-color: #ffffff;
+        border: 2px dashed #1f77b4;
+        border-radius: 0.5rem;
+    }
+    
+    /* Dataframe styling */
+    .stDataFrame {
+        background-color: #ffffff;
+    }
+    
+    /* Text input styling */
+    .stTextInput > div > div > input {
+        background-color: #ffffff;
+        color: #333333;
+        border: 1px solid #ccc;
+    }
+    
+    /* Ensure all text is readable */
+    .stMarkdown, .stText, p, div, span {
+        color: #333333 !important;
+    }
+    
+    /* Force metric containers to have proper contrast */
+    .metric-container {
+        background: white !important;
+        color: #333 !important;
+        border: 1px solid #ddd !important;
+        border-radius: 8px !important;
+        padding: 16px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -388,89 +576,152 @@ def main():
         results_df = st.session_state.analysis_results
         
         # Summary Statistics with better layout
-        st.markdown('<h2 class="section-header">📊 Summary Statistics</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="section-header">📊 Summary Statistics</h2>', unsafe_allow_html=True)
+
+    # Calculate summary stats
+    stats = st.session_state.analyzer.get_summary_stats(results_df)
+
+    # Create a container for better spacing and styling
+    with st.container():
+        # Add custom CSS for this specific container
+        st.markdown("""
+        <style>
+        div[data-testid="column"] {
+            background-color: white !important;
+            padding: 1rem !important;
+            border-radius: 0.5rem !important;
+            border: 1px solid #e0e0e0 !important;
+            margin: 0.25rem !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         
-        # Calculate summary stats
-        stats = st.session_state.analyzer.get_summary_stats(results_df)
+        # Display metrics in columns with better spacing
+        col1, col2, col3, col4 = st.columns([1, 1, 1, 1.2])
         
-        # Create a container for better spacing
-        with st.container():
-            # Display metrics in columns with better spacing
-            col1, col2, col3, col4 = st.columns([1, 1, 1, 1.2])  # Give more space to volume column
+        with col1:
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                    Total Terminals
+                </div>
+                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                    {stats.get('total_terminals', 0):,}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                    Total Merchants
+                </div>
+                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                    {stats.get('total_merchants', 0):,}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                    Total Transactions
+                </div>
+                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                    {stats.get('total_transactions', 0):,}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col4:
+            total_volume = stats.get('total_volume', 0)
+            if total_volume >= 1_000_000_000:  # Billions
+                volume_display = f"₦{total_volume/1_000_000_000:.1f}B"
+            elif total_volume >= 1_000_000:  # Millions
+                volume_display = f"₦{total_volume/1_000_000:.1f}M"
+            elif total_volume >= 1_000:  # Thousands
+                volume_display = f"₦{total_volume/1_000:.1f}K"
+            else:
+                volume_display = f"₦{total_volume:,.0f}"
             
-            with col1:
-                st.metric(
-                    label="Total Terminals",
-                    value=f"{stats.get('total_terminals', 0):,}"
-                )
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                    Total Volume
+                </div>
+                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                    {volume_display}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Add additional metrics row for more details
+        st.markdown("---")
+        col5, col6, col7, col8 = st.columns(4)
+        
+        with col5:
+            avg_trans = stats.get('avg_transactions_per_terminal', 0)
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                    Avg Trans/Terminal
+                </div>
+                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                    {avg_trans:.1f}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col6:
+            avg_volume = stats.get('avg_volume_per_terminal', 0)
+            if avg_volume >= 1_000_000:
+                avg_display = f"₦{avg_volume/1_000_000:.1f}M"
+            elif avg_volume >= 1_000:
+                avg_display = f"₦{avg_volume/1_000:.1f}K"
+            else:
+                avg_display = f"₦{avg_volume:,.0f}"
             
-            with col2:
-                st.metric(
-                    label="Total Merchants", 
-                    value=f"{stats.get('total_merchants', 0):,}"
-                )
-            
-            with col3:
-                st.metric(
-                    label="Total Transactions",
-                    value=f"{stats.get('total_transactions', 0):,}"
-                )
-            
-            with col4:
-                total_volume = stats.get('total_volume', 0)
-                if total_volume >= 1_000_000_000:  # Billions
-                    volume_display = f"₦{total_volume/1_000_000_000:.1f}B"
-                elif total_volume >= 1_000_000:  # Millions
-                    volume_display = f"₦{total_volume/1_000_000:.1f}M"
-                elif total_volume >= 1_000:  # Thousands
-                    volume_display = f"₦{total_volume/1_000:.1f}K"
-                else:
-                    volume_display = f"₦{total_volume:,.0f}"
-                
-                st.metric(
-                    label="Total Volume",
-                    value=volume_display
-                )
-            
-            # Add additional metrics row for more details
-            st.markdown("---")
-            col5, col6, col7, col8 = st.columns(4)
-            
-            with col5:
-                avg_trans = stats.get('avg_transactions_per_terminal', 0)
-                st.metric(
-                    label="Avg Trans/Terminal",
-                    value=f"{avg_trans:.1f}"
-                )
-            
-            with col6:
-                avg_volume = stats.get('avg_volume_per_terminal', 0)
-                if avg_volume >= 1_000_000:
-                    avg_display = f"₦{avg_volume/1_000_000:.1f}M"
-                elif avg_volume >= 1_000:
-                    avg_display = f"₦{avg_volume/1_000:.1f}K"
-                else:
-                    avg_display = f"₦{avg_volume:,.0f}"
-                st.metric(
-                    label="Avg Volume/Terminal",
-                    value=avg_display
-                )
-            
-            with col7:
-                # Active terminals (terminals with transactions > 0)
-                active_terminals = len(results_df[results_df['Total_Count'] > 0])
-                st.metric(
-                    label="Active Terminals",
-                    value=f"{active_terminals:,}"
-                )
-            
-            with col8:
-                # Success rate (assuming any transaction count means success)
-                success_rate = (active_terminals / stats.get('total_terminals', 1)) * 100
-                st.metric(
-                    label="Activity Rate",
-                    value=f"{success_rate:.1f}%"
-                )
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                    Avg Volume/Terminal
+                </div>
+                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                    {avg_display}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col7:
+            # Active terminals (terminals with transactions > 0)
+            active_terminals = len(results_df[results_df['Total_Count'] > 0])
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                    Active Terminals
+                </div>
+                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                    {active_terminals:,}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col8:
+            # Success rate (assuming any transaction count means success)
+            success_rate = (active_terminals / stats.get('total_terminals', 1)) * 100
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 0.9rem; color: #666; font-weight: 600; margin-bottom: 8px;">
+                    Activity Rate
+                </div>
+                <div style="font-size: 1.8rem; color: #1f77b4; font-weight: bold;">
+                    {success_rate:.1f}%
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
         # Charts section
         st.markdown('<h2 class="section-header">📈 Analytics Charts</h2>', unsafe_allow_html=True)
@@ -603,10 +854,6 @@ def main():
             )
         
         st.markdown('</div>', unsafe_allow_html=True)
-    
-    else:
-        # Instructions when no data is loaded
-        st.markdown('<h2 class="section-header">🚀 Getting Started</h2>', unsafe_allow_html=True)
         
         st.markdown("""
         ### How to use this dashboard:
